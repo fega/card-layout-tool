@@ -144,39 +144,40 @@ async function generatePrintSheets({
 
 // ---- Demo with placeholders ----
 (async () => {
-  const count = 8;
-  const { fronts, backs } = await getCardsFromDirectory('sts-cards/watcher');
-  for (let i = 0; i < count; i++) {
-    const c = createCanvas(500, 700);
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = `hsl(${i * 45}, 60%, 60%)`;
-    ctx.fillRect(0, 0, c.width, c.height);
-    // ctx.fillStyle = 'white';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`FRONT ${i + 1}`, c.width / 2, c.height / 2);
-    const f = `front_${i + 1}.png`;
-    fs.writeFileSync(f, c.toBuffer('image/png'));
-    fronts.push(f);
+  // const count = 8;
+  // for (let i = 0; i < count; i++) {
+  //   const c = createCanvas(500, 700);
+  //   const ctx = c.getContext('2d');
+  //   ctx.fillStyle = `hsl(${i * 45}, 60%, 60%)`;
+  //   ctx.fillRect(0, 0, c.width, c.height);
+  //   // ctx.fillStyle = 'white';
+  //   ctx.font = 'bold 40px sans-serif';
+  //   ctx.textAlign = 'center';
+  //   ctx.textBaseline = 'middle';
+  //   ctx.fillText(`FRONT ${i + 1}`, c.width / 2, c.height / 2);
+  //   const f = `front_${i + 1}.png`;
+  //   fs.writeFileSync(f, c.toBuffer('image/png'));
+  //   fronts.push(f);
 
-    const cb = createCanvas(500, 700);
-    const bctx = cb.getContext('2d');
-    bctx.fillStyle = `hsl(${(i * 45 + 180) % 360}, 50%, 50%)`;
-    bctx.fillRect(0, 0, cb.width, cb.height);
-    // bctx.fillStyle = 'white';
-    bctx.font = 'bold 40px sans-serif';
-    bctx.textAlign = 'center';
-    bctx.textBaseline = 'middle';
-    bctx.fillText(`BACK ${i + 1}`, cb.width / 2, cb.height / 2);
-    const b = `back_${i + 1}.png`;
-    fs.writeFileSync(b, cb.toBuffer('image/png'));
-    backs.push(b);
-  }
+  //   const cb = createCanvas(500, 700);
+  //   const bctx = cb.getContext('2d');
+  //   bctx.fillStyle = `hsl(${(i * 45 + 180) % 360}, 50%, 50%)`;
+  //   bctx.fillRect(0, 0, cb.width, cb.height);
+  //   // bctx.fillStyle = 'white';
+  //   bctx.font = 'bold 40px sans-serif';
+  //   bctx.textAlign = 'center';
+  //   bctx.textBaseline = 'middle';
+  //   bctx.fillText(`BACK ${i + 1}`, cb.width / 2, cb.height / 2);
+  //   const b = `back_${i + 1}.png`;
+  //   fs.writeFileSync(b, cb.toBuffer('image/png'));
+  //   backs.push(b);
+  // }
+
+  const { fronts: frontsWatcher, backs: backsWatcher } = await getCardsFromDirectory('sts-cards/watcher');
 
   await generatePrintSheets({ 
-    fronts: fronts, 
-    backs: backs,
+    fronts: frontsWatcher, 
+    backs: backsWatcher,
     // Optional: set background colors (RGB values 0-1)
     frontBgColor: rgb(0, 0, 0),                 // black
     backBgColor: rgb(108/255, 13/255, 190/255), // purple
@@ -184,5 +185,22 @@ async function generatePrintSheets({
     // Optional: set mark colors (RGB values 0-1)
     frontMarkColor: rgb(1, 1, 1),               // white marks
     backMarkColor: rgb(1, 1, 1),                // white marks
+    outputFrontPDF: 'cards_fronts_watcher.pdf',
+    outputBackPDF: 'cards_backs_watcher.pdf',
+  });
+
+  const { fronts: frontsSilent, backs: backsSilent } = await getCardsFromDirectory('sts-cards/silent');
+  await generatePrintSheets({ 
+    fronts: frontsSilent, 
+    backs: backsSilent,
+    // Optional: set background colors (RGB values 0-1)
+    frontBgColor: rgb(0, 0, 0),                 // black
+    backBgColor: rgb(62/255, 95/255, 56/255), // purple
+    // backBgColor: rgb(1, 1, 1), // white
+    // Optional: set mark colors (RGB values 0-1)
+    frontMarkColor: rgb(1, 1, 1),               // white marks
+    backMarkColor: rgb(1, 1, 1),                // white marks
+    outputFrontPDF: 'cards_fronts_silent.pdf',
+    outputBackPDF: 'cards_backs_silent.pdf',
   });
 })();
