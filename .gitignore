@@ -283,5 +283,10 @@ vite.config.ts.timestamp-*
 
 front_*.jpg
 back_*.jpg
+
+front_*.png
+back_*.png
 cards_fronts.pdf
 cards_backs.pdf
+
+sts-cards/*

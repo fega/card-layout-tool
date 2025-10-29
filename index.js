@@ -5,21 +5,41 @@ import fs from 'fs';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { createCanvas, loadImage } from 'canvas';
 
-const fronts = ['sts-cards/Bowling_Bash.png'];
-const backs = ['sts-cards/Bowling_Bash+.png'];
+/**
+ * loads a directory of cards and place the ones with +.png in the backs array and the ones without in the fronts array
+ */
+async function getCardsFromDirectory(directory) {
+  const files = fs.readdirSync(directory);
+  const fronts = [];
+  const backs = [];
+  for (const file of files) {
+    if (file.endsWith('.png')) {
+      if (file.endsWith('+.png')) {
+        backs.push(directory + '/' + file);
+      } else {
+        fronts.push(directory + '/' + file);
+      }
+    }
+  }
+  return { fronts, backs };
+}
+
 async function generatePrintSheets({
   fronts,
   backs,
   outputFrontPDF = 'cards_fronts.pdf',
   outputBackPDF = 'cards_backs.pdf',
   cardSizeIn = [2.5, 3.5], // inches (width, height)
-  pageSizeIn = [8.5, 11],  // Letter size
+  pageSizeIn = [8.5, 12],  // Letter size
+  // pageSizeIn = [8.5, 11],  // Letter size
   marginIn = 0.25,
   spacingIn = 0.125,
   bleedIn = 0,
   dpi = 300,
+  frontBgColor = null, // e.g. { r: 1, g: 1, b: 1 } or rgb(1, 1, 1)
+  backBgColor = null,  // e.g. { r: 0.9, g: 0.9, b: 1 } or rgb(0.9, 0.9, 1)
 }) {
-  const inchToPt = (inch) => inch * 72; // PDF uses points (1pt = 1/72in)
+  const inchToPt = (inch) => inch * 72;
   const pageWidth = inchToPt(pageSizeIn[0]);
   const pageHeight = inchToPt(pageSizeIn[1]);
   const cardW = inchToPt(cardSizeIn[0]);
@@ -34,47 +54,61 @@ async function generatePrintSheets({
   const rows = Math.floor(usableH / (cardH + spacing));
   const perPage = cols * rows;
 
-  const layoutPages = async (images) => {
+  /**
+   * Layout function: draw all cards in grid.
+   * If `mirrorRows` = true, flips each row horizontally (for back sides).
+   */
+  const layoutPages = async (images, mirrorRows = false, bgColor = null) => {
     const pdf = await PDFDocument.create();
+
     for (let p = 0; p < Math.ceil(images.length / perPage); p++) {
       const page = pdf.addPage([pageWidth, pageHeight]);
-      const ctx = page;
+      
+      // Draw background color if specified
+      if (bgColor) {
+        page.drawRectangle({
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+          color: bgColor,
+        });
+      }
+      
       const slice = images.slice(p * perPage, (p + 1) * perPage);
 
       for (let i = 0; i < slice.length; i++) {
-        const col = i % cols;
+        let col = i % cols;
         const row = Math.floor(i / cols);
+
+        // Invert the order of cards in each row for backs
+        if (mirrorRows) col = cols - 1 - col;
+
         const x = margin + col * (cardW + spacing);
         const y = pageHeight - margin - (row + 1) * cardH - row * spacing;
 
-        const img = await loadImage(slice[i]);
-        // Create canvas at high resolution (DPI)
-        const scale = dpi / 72; // Convert PDF points to pixels at desired DPI
-        const canvasW = Math.round(cardW * scale);
-        const canvasH = Math.round(cardH * scale);
-        const canvas = createCanvas(canvasW, canvasH);
-        const cctx = canvas.getContext('2d');
-        cctx.drawImage(img, 0, 0, canvasW, canvasH);
-        const imgBytes = canvas.toBuffer('image/png');
-        const embed = await pdf.embedPng(imgBytes);
+        const imgBytes = fs.readFileSync(slice[i]);
+        let embed;
+        if (slice[i].toLowerCase().endsWith('.png')) embed = await pdf.embedPng(imgBytes);
+        else embed = await pdf.embedJpg(imgBytes);
+
         page.drawImage(embed, { x, y, width: cardW, height: cardH });
-        console.log('drawImage', x, y, cardW, cardH);
-        // Crop marks and center crosshair
-        const markLen = 8; // points
-        const markColor = rgb(0, 0, 0);
-        const cx = x + cardW / 2;
-        const cy = y + cardH / 2;
+
+        // --- Crop marks ---
+        const markLen = 20;
+        let markColor = rgb(0, 0, 0);
+        const drawLine = (x1, y1, x2, y2) =>
+          page.drawLine({
+            start: { x: x1, y: y1 },
+            end: { x: x2, y: y2 },
+            color: markColor,
+            thickness: 0.5,
+          });
 
         // corner marks
-        const drawLine = (x1, y1, x2, y2) => {
-
-          console.log('drawLine', x1, y1, x2, y2);
-          page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color: markColor, thickness: 0.5 })
-        };
         // top-left
         drawLine(x - bleed - markLen, y + cardH + bleed, x - bleed, y + cardH + bleed);
         drawLine(x - bleed, y + cardH + bleed, x - bleed, y + cardH + bleed + markLen);
-
         // top-right
         drawLine(x + cardW + bleed, y + cardH + bleed, x + cardW + bleed + markLen, y + cardH + bleed);
         drawLine(x + cardW + bleed, y + cardH + bleed, x + cardW + bleed, y + cardH + bleed + markLen);
@@ -84,55 +118,58 @@ async function generatePrintSheets({
         // bottom-right
         drawLine(x + cardW + bleed, y - bleed, x + cardW + bleed + markLen, y - bleed);
         drawLine(x + cardW + bleed, y - bleed - markLen, x + cardW + bleed, y - bleed);
-        // center crosshair
-        // drawLine(cx - 4, cy, cx + 4, cy);
-        // drawLine(cx, cy - 4, cx, cy + 4);
       }
     }
     return pdf;
   };
 
-  const frontsPDF = await layoutPages(fronts);
-  const backsPDF = await layoutPages(backs);
+  // Fronts: normal order
+  const frontsPDF = await layoutPages(fronts, false, frontBgColor);
+  // Backs: mirror each row horizontally
+  const backsPDF = await layoutPages(backs, true, backBgColor);
 
   fs.writeFileSync(outputFrontPDF, await frontsPDF.save());
   fs.writeFileSync(outputBackPDF, await backsPDF.save());
   console.log(`✅ Generated: ${outputFrontPDF}, ${outputBackPDF}`);
 }
 
-// ---- Example run with placeholder images ----
+// ---- Demo with placeholders ----
 (async () => {
-  // You can replace these with your own file paths
-
   const count = 8;
+  const { fronts, backs } = await getCardsFromDirectory('sts-cards/watcher');
   for (let i = 0; i < count; i++) {
-    // generate colored placeholders
-    const c = createCanvas(1000, 1000);
+    const c = createCanvas(500, 700);
     const ctx = c.getContext('2d');
     ctx.fillStyle = `hsl(${i * 45}, 60%, 60%)`;
     ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = 'white';
+    // ctx.fillStyle = 'white';
     ctx.font = 'bold 40px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`FRONT ${i + 1}`, c.width / 2, c.height / 2);
-    const frontPath = `front_${i + 1}.jpg`;
-    fs.writeFileSync(frontPath, c.toBuffer('image/jpeg'));
-    fronts.push(frontPath);
+    const f = `front_${i + 1}.png`;
+    fs.writeFileSync(f, c.toBuffer('image/png'));
+    fronts.push(f);
 
-    const cb = createCanvas(300, 420);
-    const cctx = cb.getContext('2d');
-    cctx.fillStyle = `hsl(${(i * 45 + 180) % 360}, 50%, 50%)`;
-    cctx.fillRect(0, 0, cb.width, cb.height);
-    cctx.fillStyle = 'white';
-    cctx.font = 'bold 40px sans-serif';
-    cctx.textAlign = 'center';
-    cctx.textBaseline = 'middle';
-    cctx.fillText(`BACK ${i + 1}`, cb.width / 2, cb.height / 2);
-    const backPath = `back_${i + 1}.jpg`;
-    fs.writeFileSync(backPath, cb.toBuffer('image/jpeg'));
-    backs.push(backPath);
+    const cb = createCanvas(500, 700);
+    const bctx = cb.getContext('2d');
+    bctx.fillStyle = `hsl(${(i * 45 + 180) % 360}, 50%, 50%)`;
+    bctx.fillRect(0, 0, cb.width, cb.height);
+    // bctx.fillStyle = 'white';
+    bctx.font = 'bold 40px sans-serif';
+    bctx.textAlign = 'center';
+    bctx.textBaseline = 'middle';
+    bctx.fillText(`BACK ${i + 1}`, cb.width / 2, cb.height / 2);
+    const b = `back_${i + 1}.png`;
+    fs.writeFileSync(b, cb.toBuffer('image/png'));
+    backs.push(b);
   }
 
-  await generatePrintSheets({ fronts, backs });
+  await generatePrintSheets({ 
+    fronts: fronts, 
+    backs: backs,
+    // Optional: set background colors (RGB values 0-1)
+    frontBgColor: rgb(0, 0, 0),        // red
+    backBgColor: rgb(108/255, 13/255, 190/255),         // blue
+  });
 })();
