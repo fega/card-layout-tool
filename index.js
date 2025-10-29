@@ -30,14 +30,16 @@ async function generatePrintSheets({
   outputFrontPDF = 'cards_fronts.pdf',
   outputBackPDF = 'cards_backs.pdf',
   cardSizeIn = [2.5, 3.5], // inches (width, height)
-  pageSizeIn = [8.5, 12],  // Letter size
+  pageSizeIn = [12, 18],  // Letter size
   // pageSizeIn = [8.5, 11],  // Letter size
-  marginIn = 0.25,
-  spacingIn = 0.125,
+  marginIn = 1,
+  spacingIn = 0.5,
   bleedIn = 0,
   dpi = 300,
   frontBgColor = null, // e.g. { r: 1, g: 1, b: 1 } or rgb(1, 1, 1)
   backBgColor = null,  // e.g. { r: 0.9, g: 0.9, b: 1 } or rgb(0.9, 0.9, 1)
+  frontMarkColor = rgb(0, 0, 0), // Black marks by default
+  backMarkColor = rgb(0, 0, 0),  // Black marks by default
 }) {
   const inchToPt = (inch) => inch * 72;
   const pageWidth = inchToPt(pageSizeIn[0]);
@@ -58,7 +60,7 @@ async function generatePrintSheets({
    * Layout function: draw all cards in grid.
    * If `mirrorRows` = true, flips each row horizontally (for back sides).
    */
-  const layoutPages = async (images, mirrorRows = false, bgColor = null) => {
+  const layoutPages = async (images, mirrorRows = false, bgColor = null, markColor = rgb(0, 0, 0)) => {
     const pdf = await PDFDocument.create();
 
     for (let p = 0; p < Math.ceil(images.length / perPage); p++) {
@@ -95,8 +97,7 @@ async function generatePrintSheets({
         page.drawImage(embed, { x, y, width: cardW, height: cardH });
 
         // --- Crop marks ---
-        const markLen = 20;
-        let markColor = rgb(0, 0, 0);
+        const markLen = 15;
         const drawLine = (x1, y1, x2, y2) =>
           page.drawLine({
             start: { x: x1, y: y1 },
@@ -124,9 +125,9 @@ async function generatePrintSheets({
   };
 
   // Fronts: normal order
-  const frontsPDF = await layoutPages(fronts, false, frontBgColor);
+  const frontsPDF = await layoutPages(fronts, false, frontBgColor, frontMarkColor);
   // Backs: mirror each row horizontally
-  const backsPDF = await layoutPages(backs, true, backBgColor);
+  const backsPDF = await layoutPages(backs, true, backBgColor, backMarkColor);
 
   fs.writeFileSync(outputFrontPDF, await frontsPDF.save());
   fs.writeFileSync(outputBackPDF, await backsPDF.save());
@@ -169,7 +170,11 @@ async function generatePrintSheets({
     fronts: fronts, 
     backs: backs,
     // Optional: set background colors (RGB values 0-1)
-    frontBgColor: rgb(0, 0, 0),        // red
-    backBgColor: rgb(108/255, 13/255, 190/255),         // blue
+    frontBgColor: rgb(0, 0, 0),                 // black
+    backBgColor: rgb(108/255, 13/255, 190/255), // purple
+    // backBgColor: rgb(1, 1, 1), // white
+    // Optional: set mark colors (RGB values 0-1)
+    frontMarkColor: rgb(1, 1, 1),               // white marks
+    backMarkColor: rgb(1, 1, 1),                // white marks
   });
 })();
