@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "canvas": "^3.2.0",
+    "pdf-lib": "^1.17.1"
+  }
+}
