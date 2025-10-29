@@ -8,7 +8,7 @@ import { createCanvas, loadImage } from 'canvas';
 /**
  * loads a directory of cards and place the ones with +.png in the backs array and the ones without in the fronts array
  */
-async function getCardsFromDirectory(directory) {
+async function getCardsWithPlusVersionFromDirectory(directory) {
   const files = fs.readdirSync(directory);
   const fronts = [];
   const backs = [];
@@ -24,6 +24,20 @@ async function getCardsFromDirectory(directory) {
   return { fronts, backs };
 }
 
+async function getCardsWithBackVersionFromDirectory(directory, backName='back.png') {
+  const files = fs.readdirSync(directory);
+  const fronts = [];
+  const backs = [];
+  for (const file of files) {
+    if (file.endsWith('.png') && file !== backName) {
+      fronts.push(directory + '/' + file);
+    }
+  }
+  for (const file of fronts) {
+    backs.push(directory + '/' + backName);
+  }
+  return { fronts, backs };
+}
 async function generatePrintSheets({
   fronts,
   backs,
@@ -34,12 +48,14 @@ async function generatePrintSheets({
   // pageSizeIn = [8.5, 11],  // Letter size
   marginIn = 1,
   spacingIn = 0.5,
+  customBgColorBleedIn = 0.25,
   bleedIn = 0,
   dpi = 300,
   frontBgColor = null, // e.g. { r: 1, g: 1, b: 1 } or rgb(1, 1, 1)
   backBgColor = null,  // e.g. { r: 0.9, g: 0.9, b: 1 } or rgb(0.9, 0.9, 1)
   frontMarkColor = rgb(0, 0, 0), // Black marks by default
   backMarkColor = rgb(0, 0, 0),  // Black marks by default
+  customBackgroundColor = [],    // e.g. [{ pattern: 'Attack', color: rgb(1, 0, 0) }]
 }) {
   const inchToPt = (inch) => inch * 72;
   const pageWidth = inchToPt(pageSizeIn[0]);
@@ -48,6 +64,7 @@ async function generatePrintSheets({
   const cardH = inchToPt(cardSizeIn[1]);
   const margin = inchToPt(marginIn);
   const spacing = inchToPt(spacingIn);
+  const customBgColorBleed = inchToPt(customBgColorBleedIn);
   const bleed = inchToPt(bleedIn);
 
   const usableW = pageWidth - 2 * margin + spacing;
@@ -59,7 +76,7 @@ async function generatePrintSheets({
   // Calculate total grid size for centering
   const totalGridWidth = cols * cardW + (cols - 1) * spacing;
   const totalGridHeight = rows * cardH + (rows - 1) * spacing;
-  
+
   // Calculate starting position to center the grid
   const startX = (pageWidth - totalGridWidth) / 2;
   const startY = (pageHeight - totalGridHeight) / 2;
@@ -68,12 +85,12 @@ async function generatePrintSheets({
    * Layout function: draw all cards in grid.
    * If `mirrorRows` = true, flips each row horizontally (for back sides).
    */
-  const layoutPages = async (images, mirrorRows = false, bgColor = null, markColor = rgb(0, 0, 0)) => {
+  const layoutPages = async (images, mirrorRows = false, bgColor = null, markColor = rgb(0, 0, 0), customBgColors = []) => {
     const pdf = await PDFDocument.create();
 
     for (let p = 0; p < Math.ceil(images.length / perPage); p++) {
       const page = pdf.addPage([pageWidth, pageHeight]);
-      
+
       // Draw background color if specified
       if (bgColor) {
         page.drawRectangle({
@@ -84,7 +101,7 @@ async function generatePrintSheets({
           color: bgColor,
         });
       }
-      
+
       const slice = images.slice(p * perPage, (p + 1) * perPage);
 
       for (let i = 0; i < slice.length; i++) {
@@ -96,6 +113,27 @@ async function generatePrintSheets({
 
         const x = startX + col * (cardW + spacing);
         const y = startY + (rows - 1 - row) * (cardH + spacing);
+
+        // Check if this card matches any custom background pattern
+        const cardFilename = slice[i];
+        let customBgColor = null;
+        for (const { pattern, color } of customBgColors) {
+          if (cardFilename.includes(pattern)) {
+            customBgColor = color;
+            break;
+          }
+        }
+
+        // Draw custom background rectangle if pattern matched
+        if (customBgColor) {
+          page.drawRectangle({
+            x: x - customBgColorBleed,
+            y: y - customBgColorBleed,
+            width: cardW + 2 * customBgColorBleed,
+            height: cardH + 2 * customBgColorBleed,
+            color: customBgColor,
+          });
+        }
 
         const imgBytes = fs.readFileSync(slice[i]);
         let embed;
@@ -133,9 +171,9 @@ async function generatePrintSheets({
   };
 
   // Fronts: normal order
-  const frontsPDF = await layoutPages(fronts, false, frontBgColor, frontMarkColor);
+  const frontsPDF = await layoutPages(fronts, false, frontBgColor, frontMarkColor, customBackgroundColor);
   // Backs: mirror each row horizontally
-  const backsPDF = await layoutPages(backs, true, backBgColor, backMarkColor);
+  const backsPDF = await layoutPages(backs, true, backBgColor, backMarkColor, customBackgroundColor);
 
   fs.writeFileSync(outputFrontPDF, await frontsPDF.save());
   fs.writeFileSync(outputBackPDF, await backsPDF.save());
@@ -173,34 +211,62 @@ async function generatePrintSheets({
   //   backs.push(b);
   // }
 
-  const { fronts: frontsWatcher, backs: backsWatcher } = await getCardsFromDirectory('sts-cards/watcher');
+  const { fronts: frontsWatcher, backs: backsWatcher } = await getCardsWithPlusVersionFromDirectory('sts-cards/watcher');
+  const goldColor = rgb(223 / 255, 139 / 255, 38 / 255);
 
-  await generatePrintSheets({ 
-    fronts: frontsWatcher, 
+  await generatePrintSheets({
+    fronts: frontsWatcher,
     backs: backsWatcher,
     // Optional: set background colors (RGB values 0-1)
     frontBgColor: rgb(0, 0, 0),                 // black
-    backBgColor: rgb(108/255, 13/255, 190/255), // purple
+    backBgColor: rgb(108 / 255, 13 / 255, 190 / 255), // purple
     // backBgColor: rgb(1, 1, 1), // white
     // Optional: set mark colors (RGB values 0-1)
     frontMarkColor: rgb(1, 1, 1),               // white marks
     backMarkColor: rgb(1, 1, 1),                // white marks
     outputFrontPDF: 'cards_fronts_watcher.pdf',
     outputBackPDF: 'cards_backs_watcher.pdf',
+    customBackgroundColor: [
+      { pattern: 'Master_Reality.png', color: goldColor },
+      { pattern: 'Pressure_Points.png', color: goldColor },
+    ],
   });
 
-  const { fronts: frontsSilent, backs: backsSilent } = await getCardsFromDirectory('sts-cards/silent');
-  await generatePrintSheets({ 
-    fronts: frontsSilent, 
+  const { fronts: frontsSilent, backs: backsSilent } = await getCardsWithPlusVersionFromDirectory('sts-cards/silent');
+  await generatePrintSheets({
+    fronts: frontsSilent,
     backs: backsSilent,
     // Optional: set background colors (RGB values 0-1)
     frontBgColor: rgb(0, 0, 0),                 // black
-    backBgColor: rgb(62/255, 95/255, 56/255), // purple
+    backBgColor: rgb(62 / 255, 95 / 255, 56 / 255), // green
     // backBgColor: rgb(1, 1, 1), // white
     // Optional: set mark colors (RGB values 0-1)
     frontMarkColor: rgb(1, 1, 1),               // white marks
     backMarkColor: rgb(1, 1, 1),                // white marks
     outputFrontPDF: 'cards_fronts_silent.pdf',
     outputBackPDF: 'cards_backs_silent.pdf',
+    // Optional: custom background colors for specific card patterns
+    customBackgroundColor: [
+      { pattern: 'Nightmare.png', color: goldColor },      // Red for Attack cards
+      { pattern: 'Phantasmal_Killer.png', color: goldColor },      // Blue for Defend cards
+    ],
   });
+
+
+  const { fronts: frontsBossRelics, backs: backsBossRelics } = await getCardsWithBackVersionFromDirectory('sts-cards/boss-relics', 'back.png');
+  await generatePrintSheets({
+    fronts: frontsBossRelics,
+    backs: backsBossRelics,
+    // Optional: set background colors (RGB values 0-1)
+    frontBgColor: rgb(119 / 255, 0 / 255, 107 / 255),                 // black
+    backBgColor: rgb(93 / 255, 65 / 255, 103 / 255), // green
+    // backBgColor: rgb(1, 1, 1), // white
+    // Optional: set mark colors (RGB values 0-1)
+    frontMarkColor: rgb(1, 1, 1),               // white marks
+    backMarkColor: rgb(1, 1, 1),                // white marks
+    outputFrontPDF: 'cards_fronts_boss-relics.pdf',
+    outputBackPDF: 'cards_backs_boss-relics.pdf',
+    cardSizeIn : [2.5/2, 3.5/2], // inches (width, height)
+  });
+
 })();
