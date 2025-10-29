@@ -56,6 +56,14 @@ async function generatePrintSheets({
   const rows = Math.floor(usableH / (cardH + spacing));
   const perPage = cols * rows;
 
+  // Calculate total grid size for centering
+  const totalGridWidth = cols * cardW + (cols - 1) * spacing;
+  const totalGridHeight = rows * cardH + (rows - 1) * spacing;
+  
+  // Calculate starting position to center the grid
+  const startX = (pageWidth - totalGridWidth) / 2;
+  const startY = (pageHeight - totalGridHeight) / 2;
+
   /**
    * Layout function: draw all cards in grid.
    * If `mirrorRows` = true, flips each row horizontally (for back sides).
@@ -86,8 +94,8 @@ async function generatePrintSheets({
         // Invert the order of cards in each row for backs
         if (mirrorRows) col = cols - 1 - col;
 
-        const x = margin + col * (cardW + spacing);
-        const y = pageHeight - margin - (row + 1) * cardH - row * spacing;
+        const x = startX + col * (cardW + spacing);
+        const y = startY + (rows - 1 - row) * (cardH + spacing);
 
         const imgBytes = fs.readFileSync(slice[i]);
         let embed;
