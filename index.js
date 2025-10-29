@@ -16,7 +16,7 @@ async function generatePrintSheets({
   pageSizeIn = [8.5, 11],  // Letter size
   marginIn = 0.25,
   spacingIn = 0.125,
-  bleedIn = 0.125,
+  bleedIn = 0,
   dpi = 300,
 }) {
   const inchToPt = (inch) => inch * 72; // PDF uses points (1pt = 1/72in)
@@ -48,13 +48,17 @@ async function generatePrintSheets({
         const y = pageHeight - margin - (row + 1) * cardH - row * spacing;
 
         const img = await loadImage(slice[i]);
-        const canvas = createCanvas(cardW, cardH);
+        // Create canvas at high resolution (DPI)
+        const scale = dpi / 72; // Convert PDF points to pixels at desired DPI
+        const canvasW = Math.round(cardW * scale);
+        const canvasH = Math.round(cardH * scale);
+        const canvas = createCanvas(canvasW, canvasH);
         const cctx = canvas.getContext('2d');
-        cctx.drawImage(img, 0, 0, cardW, cardH);
-        const imgBytes = canvas.toBuffer('image/jpeg');
-        const embed = await pdf.embedJpg(imgBytes);
+        cctx.drawImage(img, 0, 0, canvasW, canvasH);
+        const imgBytes = canvas.toBuffer('image/png');
+        const embed = await pdf.embedPng(imgBytes);
         page.drawImage(embed, { x, y, width: cardW, height: cardH });
-
+        console.log('drawImage', x, y, cardW, cardH);
         // Crop marks and center crosshair
         const markLen = 8; // points
         const markColor = rgb(0, 0, 0);
@@ -62,10 +66,15 @@ async function generatePrintSheets({
         const cy = y + cardH / 2;
 
         // corner marks
-        const drawLine = (x1, y1, x2, y2) => page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color: markColor, thickness: 0.5 });
+        const drawLine = (x1, y1, x2, y2) => {
+
+          console.log('drawLine', x1, y1, x2, y2);
+          page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color: markColor, thickness: 0.5 })
+        };
         // top-left
         drawLine(x - bleed - markLen, y + cardH + bleed, x - bleed, y + cardH + bleed);
         drawLine(x - bleed, y + cardH + bleed, x - bleed, y + cardH + bleed + markLen);
+
         // top-right
         drawLine(x + cardW + bleed, y + cardH + bleed, x + cardW + bleed + markLen, y + cardH + bleed);
         drawLine(x + cardW + bleed, y + cardH + bleed, x + cardW + bleed, y + cardH + bleed + markLen);
@@ -76,8 +85,8 @@ async function generatePrintSheets({
         drawLine(x + cardW + bleed, y - bleed, x + cardW + bleed + markLen, y - bleed);
         drawLine(x + cardW + bleed, y - bleed - markLen, x + cardW + bleed, y - bleed);
         // center crosshair
-        drawLine(cx - 4, cy, cx + 4, cy);
-        drawLine(cx, cy - 4, cx, cy + 4);
+        // drawLine(cx - 4, cy, cx + 4, cy);
+        // drawLine(cx, cy - 4, cx, cy + 4);
       }
     }
     return pdf;
