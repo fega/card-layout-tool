@@ -55,7 +55,7 @@ async function generatePrintSheets({
   backBgColor = null,  // e.g. { r: 0.9, g: 0.9, b: 1 } or rgb(0.9, 0.9, 1)
   frontMarkColor = rgb(0, 0, 0), // Black marks by default
   backMarkColor = rgb(0, 0, 0),  // Black marks by default
-  customBackgroundColor = [],    // e.g. [{ pattern: 'Attack', color: rgb(1, 0, 0) }]
+  customBackgroundColor = [],    // e.g. [{ pattern: 'Attack', color: rgb(1, 0, 0) }] or [{ pattern: 'Attack', image: 'path/to/image.png' }]
 }) {
   const inchToPt = (inch) => inch * 72;
   const pageWidth = inchToPt(pageSizeIn[0]);
@@ -116,23 +116,41 @@ async function generatePrintSheets({
 
         // Check if this card matches any custom background pattern
         const cardFilename = slice[i];
-        let customBgColor = null;
-        for (const { pattern, color } of customBgColors) {
-          if (cardFilename.includes(pattern)) {
-            customBgColor = color;
+        let customBg = null;
+        for (const bgConfig of customBgColors) {
+          if (cardFilename.includes(bgConfig.pattern)) {
+            customBg = bgConfig;
             break;
           }
         }
 
-        // Draw custom background rectangle if pattern matched
-        if (customBgColor) {
-          page.drawRectangle({
-            x: x - customBgColorBleed,
-            y: y - customBgColorBleed,
-            width: cardW + 2 * customBgColorBleed,
-            height: cardH + 2 * customBgColorBleed,
-            color: customBgColor,
-          });
+        // Draw custom background (color or image) if pattern matched
+        if (customBg) {
+          if (customBg.color) {
+            // Draw solid color background
+            page.drawRectangle({
+              x: x - customBgColorBleed,
+              y: y - customBgColorBleed,
+              width: cardW + 2 * customBgColorBleed,
+              height: cardH + 2 * customBgColorBleed,
+              color: customBg.color,
+            });
+          } else if (customBg.image) {
+            // Draw image background
+            const bgImgBytes = fs.readFileSync(customBg.image);
+            let bgEmbed;
+            if (customBg.image.toLowerCase().endsWith('.png')) {
+              bgEmbed = await pdf.embedPng(bgImgBytes);
+            } else {
+              bgEmbed = await pdf.embedJpg(bgImgBytes);
+            }
+            page.drawImage(bgEmbed, {
+              x: x - customBgColorBleed,
+              y: y - customBgColorBleed,
+              width: cardW + 2 * customBgColorBleed,
+              height: cardH + 2 * customBgColorBleed,
+            });
+          }
         }
 
         const imgBytes = fs.readFileSync(slice[i]);
@@ -211,46 +229,46 @@ async function generatePrintSheets({
   //   backs.push(b);
   // }
 
-  const { fronts: frontsWatcher, backs: backsWatcher } = await getCardsWithPlusVersionFromDirectory('sts-cards/watcher');
-  const goldColor = rgb(223 / 255, 139 / 255, 38 / 255);
+  // const { fronts: frontsWatcher, backs: backsWatcher } = await getCardsWithPlusVersionFromDirectory('sts-cards/watcher');
+  // const goldColor = rgb(223 / 255, 139 / 255, 38 / 255);
 
-  await generatePrintSheets({
-    fronts: frontsWatcher,
-    backs: backsWatcher,
-    // Optional: set background colors (RGB values 0-1)
-    frontBgColor: rgb(0, 0, 0),                 // black
-    backBgColor: rgb(108 / 255, 13 / 255, 190 / 255), // purple
-    // backBgColor: rgb(1, 1, 1), // white
-    // Optional: set mark colors (RGB values 0-1)
-    frontMarkColor: rgb(1, 1, 1),               // white marks
-    backMarkColor: rgb(1, 1, 1),                // white marks
-    outputFrontPDF: 'cards_fronts_watcher.pdf',
-    outputBackPDF: 'cards_backs_watcher.pdf',
-    customBackgroundColor: [
-      { pattern: 'Master_Reality.png', color: goldColor },
-      { pattern: 'Pressure_Points.png', color: goldColor },
-    ],
-  });
+  // await generatePrintSheets({
+  //   fronts: frontsWatcher,
+  //   backs: backsWatcher,
+  //   // Optional: set background colors (RGB values 0-1)
+  //   frontBgColor: rgb(0, 0, 0),                 // black
+  //   backBgColor: rgb(108 / 255, 13 / 255, 190 / 255), // purple
+  //   // backBgColor: rgb(1, 1, 1), // white
+  //   // Optional: set mark colors (RGB values 0-1)
+  //   frontMarkColor: rgb(1, 1, 1),               // white marks
+  //   backMarkColor: rgb(1, 1, 1),                // white marks
+  //   outputFrontPDF: 'cards_fronts_watcher.pdf',
+  //   outputBackPDF: 'cards_backs_watcher.pdf',
+  //   customBackgroundColor: [
+  //     { pattern: 'Master_Reality.png', color: goldColor },
+  //     { pattern: 'Pressure_Points.png', color: goldColor },
+  //   ],
+  // });
 
-  const { fronts: frontsSilent, backs: backsSilent } = await getCardsWithPlusVersionFromDirectory('sts-cards/silent');
-  await generatePrintSheets({
-    fronts: frontsSilent,
-    backs: backsSilent,
-    // Optional: set background colors (RGB values 0-1)
-    frontBgColor: rgb(0, 0, 0),                 // black
-    backBgColor: rgb(62 / 255, 95 / 255, 56 / 255), // green
-    // backBgColor: rgb(1, 1, 1), // white
-    // Optional: set mark colors (RGB values 0-1)
-    frontMarkColor: rgb(1, 1, 1),               // white marks
-    backMarkColor: rgb(1, 1, 1),                // white marks
-    outputFrontPDF: 'cards_fronts_silent.pdf',
-    outputBackPDF: 'cards_backs_silent.pdf',
-    // Optional: custom background colors for specific card patterns
-    customBackgroundColor: [
-      { pattern: 'Nightmare.png', color: goldColor },      // Red for Attack cards
-      { pattern: 'Phantasmal_Killer.png', color: goldColor },      // Blue for Defend cards
-    ],
-  });
+  // const { fronts: frontsSilent, backs: backsSilent } = await getCardsWithPlusVersionFromDirectory('sts-cards/silent');
+  // await generatePrintSheets({
+  //   fronts: frontsSilent,
+  //   backs: backsSilent,
+  //   // Optional: set background colors (RGB values 0-1)
+  //   frontBgColor: rgb(0, 0, 0),                 // black
+  //   backBgColor: rgb(62 / 255, 95 / 255, 56 / 255), // green
+  //   // backBgColor: rgb(1, 1, 1), // white
+  //   // Optional: set mark colors (RGB values 0-1)
+  //   frontMarkColor: rgb(1, 1, 1),               // white marks
+  //   backMarkColor: rgb(1, 1, 1),                // white marks
+  //   outputFrontPDF: 'cards_fronts_silent.pdf',
+  //   outputBackPDF: 'cards_backs_silent.pdf',
+  //   // Optional: custom background colors for specific card patterns
+  //   customBackgroundColor: [
+  //     { pattern: 'Nightmare.png', color: goldColor },      // Red for Attack cards
+  //     { pattern: 'Phantasmal_Killer.png', color: goldColor },      // Blue for Defend cards
+  //   ],
+  // });
 
 
   const { fronts: frontsBossRelics, backs: backsBossRelics } = await getCardsWithBackVersionFromDirectory('sts-cards/boss-relics', 'back.png');
@@ -267,6 +285,12 @@ async function generatePrintSheets({
     outputFrontPDF: 'cards_fronts_boss-relics.pdf',
     outputBackPDF: 'cards_backs_boss-relics.pdf',
     cardSizeIn : [2.5/2, 3.5/2], // inches (width, height)
+    // customBgColorBleedIn: 0.11, // back 52px bleed
+    customBgColorBleedIn: 0.0325, // front 12px bleed
+    customBackgroundColor: [
+      { pattern: 'back.png', image: 'sts-cards/boss-relic-back-bleed.png' },      // Red for Attack cards
+      { pattern: '.png', image: 'sts-cards/boss-relic-bleed.png' },      // Red for Attack cards
+    ],
   });
 
 })();
